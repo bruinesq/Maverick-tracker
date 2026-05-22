@@ -3,187 +3,219 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>Maverick Tracker</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
 
 :root {
-  --bonus-bg: #0096d6;
-  --bonus-surf: #007bb8;
-  --bonus-dark: #004f7c;
-  --loan-bg: #9b3a36;
-  --loan-surf: #7d2f2b;
-  --loan-card: rgba(0,0,0,0.22);
-  --green: #22c55e;
-  --card-border: rgba(255,255,255,0.22);
-  --glass: rgba(255,255,255,0.13);
+  /* Blue: original #0096d6 lightened 30% toward white */
+  --bonus-bg:   #4db8e8;
+  --bonus-surf: #29a8e0;
+  --bonus-dark: #005f99;
+  /* Red: original #9b3a36 lightened 50% toward white */
+  --loan-bg:    #cd9d9b;
+  --loan-surf:  #c08a88;
+  --loan-card:  rgba(0,0,0,0.10);
+  --green:  #16a34a;
+  --card-border: rgba(255,255,255,0.30);
+  --glass:  rgba(255,255,255,0.20);
+  /* Light theme for pages */
+  --page-bg: #f5f5f7;
+  --card-bg: #ffffff;
+  --text-primary: #1a1a2e;
+  --text-secondary: #6b7280;
+  --border-light: #e5e7eb;
 }
 
 * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
-html, body { height:100%; }
+html { height:100%; }
 body {
   font-family:'Syne',sans-serif;
-  background:#111;
-  display:flex; justify-content:center; align-items:flex-start;
+  background:#fff;
   min-height:100vh;
+  width:100%;
+  max-width:100vw;
+  overflow-x:hidden;
 }
 
-/* ── Phone shell ── */
-.phone { width:390px; min-height:100vh; background:#000; position:relative; display:flex; flex-direction:column; }
+/* Full-width phone — no artificial shell */
+.phone { width:100%; min-height:100vh; display:flex; flex-direction:column; background:#fff; }
 .screen { flex:1; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; }
 .screen::-webkit-scrollbar { display:none; }
 
 /* ── Status bar ── */
 .status-bar {
   height:44px; display:flex; align-items:center; justify-content:space-between;
-  padding:0 20px; font-size:12px; font-weight:700;
-  position:sticky; top:0; z-index:50;
-  color:#fff;
+  padding:0 16px; font-size:12px; font-weight:700;
+  position:sticky; top:0; z-index:50; color:#fff;
 }
 .status-bar.blue { background:var(--bonus-bg); }
 .status-bar.red  { background:var(--loan-bg); }
+.status-right { display:flex; align-items:center; gap:12px; }
+.dots-btn {
+  font-size:20px; cursor:pointer; color:#fff; line-height:1;
+  padding:2px 6px; border-radius:6px; background:rgba(255,255,255,0.18);
+  border:none; font-weight:900; letter-spacing:1px;
+}
+
+/* Dots menu dropdown */
+.dots-menu {
+  position:absolute; top:48px; right:12px;
+  background:#fff; border:1px solid var(--border-light);
+  border-radius:14px; padding:6px; z-index:200;
+  box-shadow:0 8px 32px rgba(0,0,0,.15);
+  display:none; min-width:160px;
+}
+.dots-menu.open { display:block; }
+.dots-item {
+  display:flex; align-items:center; gap:10px;
+  padding:11px 14px; font-size:13px; font-weight:700;
+  color:var(--text-primary); cursor:pointer; border-radius:9px;
+}
+.dots-item:hover { background:var(--page-bg); }
+.dots-item span { font-size:16px; }
 
 /* ── Tab bar ── */
 .tab-bar { display:flex; font-size:13px; font-weight:700; position:sticky; top:44px; z-index:49; }
 .tab-bar.blue { background:var(--bonus-surf); }
 .tab-bar.red  { background:var(--loan-surf); }
-.tab-bar .tab { flex:1; text-align:center; padding:12px 0; color:rgba(255,255,255,.5); cursor:pointer; border-bottom:2px solid transparent; transition:all .2s; }
+.tab-bar .tab { flex:1; text-align:center; padding:12px 0; color:rgba(255,255,255,.55); cursor:pointer; border-bottom:2px solid transparent; transition:all .2s; }
 .tab-bar .tab.active { color:#fff; border-bottom-color:#fff; }
 
-/* ── Page backgrounds ── */
-.bonus-page { background:var(--bonus-bg); min-height:calc(100vh - 88px); padding-bottom:120px; }
-.loan-page  { background:var(--loan-bg);  min-height:calc(100vh - 88px); padding-bottom:120px; }
+/* ── Page backgrounds — LIGHT THEME ── */
+.bonus-page { background:var(--bonus-bg); min-height:calc(100vh - 88px); padding-bottom:40px; }
+.loan-page  { background:var(--loan-bg);  min-height:calc(100vh - 88px); padding-bottom:40px; }
 
-/* ── Glass card ── */
+/* ── Glass card (on colored backgrounds) ── */
 .g-card { background:var(--glass); border:1px solid var(--card-border); border-radius:16px; margin:12px 14px; padding:14px 16px; color:#fff; }
-.g-label { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.6); margin-bottom:8px; }
-.g-big { font-family:'DM Mono',monospace; font-size:34px; font-weight:500; line-height:1; margin-bottom:6px; }
-.g-sub { font-size:11px; color:rgba(255,255,255,.6); display:flex; justify-content:space-between; margin-bottom:3px; }
+.g-label { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.7); margin-bottom:8px; }
+.g-big { font-family:'DM Mono',monospace; font-size:34px; font-weight:500; line-height:1; margin-bottom:6px; color:#fff; }
+.g-sub { font-size:11px; color:rgba(255,255,255,.7); display:flex; justify-content:space-between; margin-bottom:3px; }
 .g-sub strong { color:#fff; }
-.g-divider { height:1px; background:rgba(255,255,255,.12); margin:10px 0; }
+.g-divider { height:1px; background:rgba(255,255,255,.2); margin:10px 0; }
 
-/* ════════════════════════════════
-   BONUS TAB
-════════════════════════════════ */
-
-/* Target row */
+/* ════ BONUS TAB ════ */
 .target-row { display:flex; align-items:stretch; gap:10px; margin:4px 14px 6px; }
 .target-left {
   flex:0 0 46%; background:var(--glass); border:1px solid var(--card-border);
   border-radius:14px; padding:9px 12px;
 }
-.target-lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:rgba(255,255,255,.6); margin-bottom:5px; }
+.target-lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:rgba(255,255,255,.75); margin-bottom:5px; }
 .target-val-row { display:flex; align-items:center; gap:7px; }
 .target-val { font-family:'DM Mono',monospace; font-size:21px; font-weight:500; color:#fff; }
-.target-edit { background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.35); color:#fff; border-radius:7px; padding:2px 9px; font-size:10px; font-weight:700; cursor:pointer; }
+.target-edit { background:rgba(255,255,255,.25); border:1px solid rgba(255,255,255,.45); color:#fff; border-radius:7px; padding:2px 9px; font-size:10px; font-weight:700; cursor:pointer; }
 .add-entry-btn {
   flex:1; background:#fff; color:var(--bonus-dark); border:none; border-radius:14px;
   font-size:15px; font-weight:800; font-family:'Syne',sans-serif; cursor:pointer;
-  letter-spacing:.02em; box-shadow:0 4px 16px rgba(0,0,0,.15);
+  letter-spacing:.02em; box-shadow:0 4px 16px rgba(0,0,0,.12);
 }
 
 /* Progress section */
 .prog-section { margin:6px 14px 8px; color:#fff; }
-.prog-lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.65); margin-bottom:6px; }
-.prog-track { background:rgba(0,0,0,.28); border-radius:100px; height:22px; position:relative; overflow:visible; margin-bottom:5px; }
-.prog-fill { height:100%; border-radius:100px; background:linear-gradient(90deg,#fff 0%,rgba(255,255,255,.65) 100%); position:relative; min-width:2px; }
+.prog-lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.8); margin-bottom:6px; }
+.prog-track { background:rgba(0,0,0,.2); border-radius:100px; height:22px; position:relative; overflow:visible; margin-bottom:5px; }
+.prog-fill { height:100%; border-radius:100px; background:linear-gradient(90deg,#fff 0%,rgba(255,255,255,.7) 100%); position:relative; min-width:2px; }
 .prog-marker {
   position:absolute; right:0; top:50%; transform:translate(50%,-50%);
   background:#fff; color:var(--bonus-dark); border-radius:8px; padding:3px 8px;
   font-size:10px; font-weight:800; font-family:'DM Mono',monospace; white-space:nowrap;
-  box-shadow:0 2px 8px rgba(0,0,0,.25);
+  box-shadow:0 2px 8px rgba(0,0,0,.2);
 }
-.prog-ends { display:flex; justify-content:space-between; font-size:9px; color:rgba(255,255,255,.5); font-family:'DM Mono',monospace; }
+.prog-ends { display:flex; justify-content:space-between; font-size:9px; color:rgba(255,255,255,.65); font-family:'DM Mono',monospace; }
 .b-badge { display:inline-flex; align-items:center; gap:5px; padding:4px 11px; border-radius:100px; font-size:10px; font-weight:700; margin-top:6px; font-family:'DM Mono',monospace; }
-.b-badge.green { background:rgba(34,197,94,.2); color:#4ade80; border:1px solid rgba(34,197,94,.35); }
-.b-badge.red   { background:rgba(239,68,68,.2);  color:#fca5a5; border:1px solid rgba(239,68,68,.35); }
-.b-badge.amber { background:rgba(251,191,36,.2); color:#fde68a; border:1px solid rgba(251,191,36,.35); }
+.b-badge.green { background:rgba(22,163,74,.25); color:#bbf7d0; border:1px solid rgba(22,163,74,.4); }
+.b-badge.red   { background:rgba(220,38,38,.2);  color:#fecaca; border:1px solid rgba(220,38,38,.35); }
 
-/* ── Keypad modal (slides up) ── */
+/* ── Urine Keypad modal ── */
 .kp-overlay {
-  position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200;
+  position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200;
   display:flex; align-items:flex-end; justify-content:center;
   opacity:0; pointer-events:none; transition:opacity .25s;
 }
 .kp-overlay.open { opacity:1; pointer-events:all; }
 .kp-sheet {
-  width:390px; background:rgba(0,70,120,.97); border-radius:20px 20px 0 0;
+  width:100%; max-width:100vw;
+  background:rgba(0,80,140,.97); border-radius:20px 20px 0 0;
   border-top:1px solid rgba(255,255,255,.2);
   transform:translateY(100%); transition:transform .3s cubic-bezier(.4,0,.2,1);
   overflow:hidden;
+  padding-bottom:env(safe-area-inset-bottom);
 }
 .kp-overlay.open .kp-sheet { transform:translateY(0); }
-
 .kp-handle { width:36px; height:4px; background:rgba(255,255,255,.3); border-radius:2px; margin:10px auto 6px; }
 .kp-top { display:flex; justify-content:space-between; align-items:center; padding:0 16px 10px; }
-.kp-top-lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.65); }
-.kp-x { font-size:20px; color:rgba(255,255,255,.5); cursor:pointer; line-height:1; padding:4px; }
+.kp-top-lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.7); }
+.kp-x { font-size:20px; color:rgba(255,255,255,.55); cursor:pointer; padding:4px 8px; }
 
-/* Two display boxes */
+/* Keypad display boxes */
 .kp-display { display:flex; gap:10px; padding:0 16px 10px; }
-.kd-box { flex:1; background:rgba(0,0,0,.3); border-radius:12px; padding:10px 12px; border:1.5px solid transparent; cursor:pointer; }
+.kd-box { flex:1; background:rgba(0,0,0,.25); border-radius:12px; padding:10px 12px; border:1.5px solid transparent; cursor:pointer; }
 .kd-box.active { background:rgba(255,255,255,.18); border-color:rgba(255,255,255,.6); }
-.kd-lbl { font-size:9px; text-transform:uppercase; letter-spacing:.07em; color:rgba(255,255,255,.55); margin-bottom:3px; }
+.kd-lbl { font-size:9px; text-transform:uppercase; letter-spacing:.07em; color:rgba(255,255,255,.6); margin-bottom:3px; }
 .kd-val { font-family:'DM Mono',monospace; font-size:28px; font-weight:500; color:#fff; line-height:1; min-height:34px; }
-.kd-sub { font-size:10px; color:rgba(255,255,255,.5); margin-top:3px; }
+.kd-sub { font-size:10px; color:rgba(255,255,255,.55); margin-top:3px; }
 
 /* Adjust toggle */
-.adj-row { display:flex; align-items:center; gap:9px; padding:0 16px 10px; font-size:11px; color:rgba(255,255,255,.8); }
+.adj-row { display:flex; align-items:center; gap:9px; padding:0 16px 10px; font-size:11px; color:rgba(255,255,255,.85); }
 .tog { width:38px; height:22px; border-radius:11px; background:#555; position:relative; cursor:pointer; transition:background .2s; flex-shrink:0; }
 .tog.on { background:var(--green); }
 .tog::after { content:''; position:absolute; left:2px; top:2px; width:18px; height:18px; border-radius:50%; background:#fff; transition:left .2s; }
 .tog.on::after { left:18px; }
 
 /* Keypad grid */
-.kp-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:rgba(0,0,0,.3); border-top:1px solid rgba(255,255,255,.1); }
+.kp-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:rgba(0,0,0,.25); border-top:1px solid rgba(255,255,255,.1); }
 .kp-key { background:rgba(255,255,255,.07); padding:16px 0; text-align:center; font-size:22px; font-weight:600; color:#fff; cursor:pointer; user-select:none; display:flex; flex-direction:column; align-items:center; justify-content:center; transition:background .1s; }
-.kp-key:active { background:rgba(255,255,255,.2); }
+.kp-key:active { background:rgba(255,255,255,.22); }
 .kp-key .sub { font-size:8px; color:rgba(255,255,255,.4); margin-top:1px; }
-.kp-add { grid-column:span 3; background:rgba(255,255,255,.14); color:#fff; padding:15px; font-size:15px; font-weight:800; font-family:'Syne',sans-serif; border:none; border-top:1px solid rgba(255,255,255,.1); cursor:pointer; letter-spacing:.05em; }
-.kp-add:active { background:rgba(255,255,255,.22); }
+.kp-add { grid-column:span 3; background:rgba(255,255,255,.92); color:#004f7c; padding:15px; font-size:15px; font-weight:800; font-family:'Syne',sans-serif; border:none; cursor:pointer; letter-spacing:.05em; }
+.kp-add:active { background:#fff; }
 
 /* ── Logs section ── */
 .logs-wrap { margin:12px 14px 0; }
 .logs-hdr { display:flex; justify-content:space-between; align-items:center; margin-bottom:9px; }
-.logs-title { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.65); }
+.logs-title { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.8); }
 .year-row { display:flex; gap:5px; align-items:center; position:relative; }
-.yr-pill { padding:3px 12px; border-radius:100px; font-size:10px; font-weight:700; border:1px solid rgba(255,255,255,.3); color:rgba(255,255,255,.5); cursor:pointer; font-family:'DM Mono',monospace; }
-.yr-pill.active { background:rgba(255,255,255,.22); color:#fff; border-color:rgba(255,255,255,.6); }
-.yr-prev { font-size:10px; font-weight:700; color:rgba(255,255,255,.55); cursor:pointer; font-family:'DM Mono',monospace; border:1px solid rgba(255,255,255,.25); border-radius:100px; padding:3px 10px; }
-.prior-dropdown { position:absolute; top:28px; right:0; background:rgba(0,60,100,.97); border:1px solid rgba(255,255,255,.2); border-radius:10px; padding:4px; z-index:100; display:none; min-width:100px; }
+.yr-pill { padding:3px 12px; border-radius:100px; font-size:10px; font-weight:700; border:1px solid rgba(255,255,255,.35); color:rgba(255,255,255,.6); cursor:pointer; font-family:'DM Mono',monospace; }
+.yr-pill.active { background:rgba(255,255,255,.28); color:#fff; border-color:rgba(255,255,255,.7); }
+.yr-prev { font-size:10px; font-weight:700; color:rgba(255,255,255,.65); cursor:pointer; font-family:'DM Mono',monospace; border:1px solid rgba(255,255,255,.3); border-radius:100px; padding:3px 10px; }
+.prior-dropdown { position:absolute; top:28px; right:0; background:rgba(0,60,110,.97); border:1px solid rgba(255,255,255,.2); border-radius:10px; padding:4px; z-index:100; display:none; min-width:100px; }
 .prior-dropdown.open { display:block; }
 .prior-yr-item { padding:8px 14px; font-size:12px; font-weight:700; color:#fff; cursor:pointer; border-radius:7px; font-family:'DM Mono',monospace; }
 .prior-yr-item:hover, .prior-yr-item.active { background:rgba(255,255,255,.15); }
 
-.log-entry { background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18); border-radius:12px; padding:11px 14px; margin-bottom:7px; display:flex; justify-content:space-between; align-items:center; }
-.log-date { font-size:9px; color:rgba(255,255,255,.55); font-family:'DM Mono',monospace; margin-bottom:3px; }
+.log-entry { background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.25); border-radius:12px; padding:11px 14px; margin-bottom:7px; display:flex; justify-content:space-between; align-items:center; }
+.log-date { font-size:9px; color:rgba(255,255,255,.65); font-family:'DM Mono',monospace; margin-bottom:3px; }
 .log-desc { font-size:12px; font-weight:600; color:#fff; }
-.log-val { font-family:'DM Mono',monospace; font-size:15px; font-weight:500; color:#a7f3d0; text-align:right; }
-.log-run { font-size:10px; color:rgba(255,255,255,.4); font-family:'DM Mono',monospace; text-align:right; margin-top:2px; }
-.del-btn { background:rgba(239,68,68,.15); border:1px solid rgba(239,68,68,.3); color:#fca5a5; border-radius:7px; padding:3px 9px; font-size:10px; cursor:pointer; margin-left:8px; }
+.log-val { font-family:'DM Mono',monospace; font-size:15px; font-weight:500; color:#fff; text-align:right; }
+.log-run { font-size:10px; color:rgba(255,255,255,.55); font-family:'DM Mono',monospace; text-align:right; margin-top:2px; }
+.del-btn { background:rgba(220,38,38,.2); border:1px solid rgba(220,38,38,.4); color:#fecaca; border-radius:7px; padding:4px 10px; font-size:10px; cursor:pointer; margin-left:8px; flex-shrink:0; }
 
-/* ════════════════════════════════
-   LOAN TAB
-════════════════════════════════ */
-.l-card { background:var(--loan-card); border:1px solid rgba(255,255,255,.12); border-radius:16px; margin:12px 14px; padding:14px 16px; color:#fff; }
-.l-lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.6); margin-bottom:8px; }
-.l-big { font-family:'DM Mono',monospace; font-size:34px; font-weight:500; color:#fecaca; line-height:1; margin-bottom:6px; }
-.l-sub { font-size:11px; color:rgba(255,255,255,.6); display:flex; justify-content:space-between; margin-bottom:3px; }
+/* ════ LOAN TAB ════ */
+.l-card { background:var(--loan-card); border:1px solid rgba(255,255,255,.2); border-radius:16px; margin:12px 14px; padding:14px 16px; color:#fff; }
+.l-lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.75); margin-bottom:8px; }
+.l-big { font-family:'DM Mono',monospace; font-size:34px; font-weight:500; color:#fff; line-height:1; margin-bottom:6px; }
+.l-sub { font-size:11px; color:rgba(255,255,255,.75); display:flex; justify-content:space-between; margin-bottom:3px; }
 .l-sub strong { color:#fff; }
-.l-divider { height:1px; background:rgba(255,255,255,.1); margin:10px 0; }
+.l-divider { height:1px; background:rgba(255,255,255,.2); margin:10px 0; }
 
 /* Add form */
-.l-form { margin:0 14px 12px; background:var(--loan-card); border:1px solid rgba(255,255,255,.1); border-radius:16px; padding:13px 14px; }
-.l-form-lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.55); margin-bottom:10px; }
-.l-field { background:rgba(0,0,0,.25); border:1px solid rgba(255,255,255,.18); color:#fff; padding:9px 12px; border-radius:10px; font-size:13px; font-family:'DM Mono',monospace; width:100%; margin-bottom:7px; outline:none; }
-.l-field::placeholder { color:rgba(255,255,255,.35); }
-.l-field:focus { border-color:rgba(255,255,255,.5); }
-.l-row2 { display:flex; gap:8px; }
-.l-add-btn { background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.35); color:#fff; border-radius:10px; padding:9px 18px; font-size:13px; font-weight:700; cursor:pointer; font-family:'Syne',sans-serif; white-space:nowrap; }
-.l-add-btn:active { background:rgba(255,255,255,.28); }
-.l-hint { font-size:9px; color:rgba(255,255,255,.4); margin-top:5px; font-family:'DM Mono',monospace; }
+.l-form { margin:0 14px 12px; background:var(--loan-card); border:1px solid rgba(255,255,255,.2); border-radius:16px; padding:13px 14px; }
+.l-form-lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.7); margin-bottom:10px; }
+.l-field { background:rgba(255,255,255,.25); border:1px solid rgba(255,255,255,.35); color:#fff; padding:9px 12px; border-radius:10px; font-size:13px; font-family:'DM Mono',monospace; width:100%; margin-bottom:7px; outline:none; }
+.l-field::placeholder { color:rgba(255,255,255,.5); }
+.l-field:focus { border-color:rgba(255,255,255,.7); background:rgba(255,255,255,.3); }
+.l-hint { font-size:9px; color:rgba(255,255,255,.55); margin-top:5px; font-family:'DM Mono',monospace; }
 
-/* Date picker overlay */
+/* Numeric amount field + confirm button */
+.l-amt-row { display:flex; gap:8px; align-items:stretch; }
+.l-amt-field { flex:1; background:rgba(255,255,255,.25); border:1px solid rgba(255,255,255,.35); color:#fff; padding:9px 12px; border-radius:10px; font-size:13px; font-family:'DM Mono',monospace; outline:none; -webkit-appearance:none; }
+.l-amt-field::placeholder { color:rgba(255,255,255,.5); }
+.l-confirm-btn { background:#fff; color:var(--loan-surf); border:none; border-radius:10px; padding:9px 18px; font-size:13px; font-weight:800; cursor:pointer; font-family:'Syne',sans-serif; white-space:nowrap; }
+.l-confirm-btn:active { background:rgba(255,255,255,.85); }
+
+/* Calendar overlay */
 .cal-overlay { position:fixed; inset:0; z-index:300; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.5); opacity:0; pointer-events:none; transition:opacity .2s; }
 .cal-overlay.open { opacity:1; pointer-events:all; }
 .cal-sheet { background:#1c2030; border:1px solid rgba(255,255,255,.15); border-radius:18px; padding:16px; width:320px; color:#fff; }
@@ -194,26 +226,26 @@ body {
 .cal-dow { text-align:center; font-size:9px; font-weight:700; color:rgba(255,255,255,.4); padding:4px 0; text-transform:uppercase; }
 .cal-day { text-align:center; padding:7px 0; font-size:13px; font-family:'DM Mono',monospace; border-radius:8px; cursor:pointer; transition:background .1s; }
 .cal-day:hover { background:rgba(255,255,255,.15); }
-.cal-day.today { background:rgba(155,58,54,.6); font-weight:700; }
+.cal-day.today { background:rgba(180,80,80,.5); font-weight:700; }
 .cal-day.selected { background:#fff; color:#1c2030; font-weight:700; }
 .cal-day.empty { cursor:default; }
 .cal-cancel { width:100%; margin-top:10px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.15); color:rgba(255,255,255,.6); border-radius:10px; padding:9px; font-size:13px; cursor:pointer; }
 
 /* Loan log */
 .l-log-wrap { margin:0 14px; }
-.l-log-hdr { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.5); margin-bottom:8px; }
-.l-entry { background:var(--loan-card); border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:10px 13px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; }
-.l-entry-date { font-size:9px; color:rgba(255,255,255,.5); font-family:'DM Mono',monospace; margin-bottom:3px; }
+.l-log-hdr { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.l-log-title { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.7); }
+.l-entry { background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.25); border-radius:12px; padding:10px 13px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; }
+.l-entry-date { font-size:9px; color:rgba(255,255,255,.65); font-family:'DM Mono',monospace; margin-bottom:3px; }
 .l-entry-desc { font-size:12px; font-weight:600; color:#fff; }
 .l-entry-amt { font-family:'DM Mono',monospace; font-size:14px; text-align:right; }
-.l-entry-amt.neg { color:#fca5a5; }
-.l-entry-amt.pos { color:#fde68a; }
-.l-entry-bal { font-size:10px; color:rgba(255,255,255,.4); font-family:'DM Mono',monospace; text-align:right; margin-top:2px; }
-.l-more { text-align:center; font-size:10px; color:rgba(255,255,255,.35); padding:8px 0; font-family:'DM Mono',monospace; }
+.l-entry-amt.neg { color:#fff; }
+.l-entry-amt.pos { color:#fef3c7; }
+.l-entry-bal { font-size:10px; color:rgba(255,255,255,.5); font-family:'DM Mono',monospace; text-align:right; margin-top:2px; }
 
 /* Toast */
 .toast {
-  position:fixed; bottom:32px; left:50%; transform:translateX(-50%) translateY(20px);
+  position:fixed; bottom:40px; left:50%; transform:translateX(-50%) translateY(20px);
   background:#1e293b; color:#fff; border-radius:12px; padding:10px 20px;
   font-size:12px; font-weight:600; box-shadow:0 8px 24px rgba(0,0,0,.4);
   z-index:999; opacity:0; transition:all .3s; pointer-events:none; white-space:nowrap;
@@ -224,10 +256,19 @@ body {
 <body>
 <div class="phone">
 
-  <!-- Status bar (color switches with tab) -->
-  <div class="status-bar blue" id="statusBar">
+  <!-- Status bar -->
+  <div class="status-bar blue" id="statusBar" style="position:relative;">
     <span id="clockDisplay">9:41</span>
-    <span>●●●</span>
+    <div class="status-right">
+      <span>●●●</span>
+      <button class="dots-btn" onclick="toggleDotsMenu(event)">···</button>
+    </div>
+    <!-- Dots menu -->
+    <div class="dots-menu" id="dots-menu">
+      <div class="dots-item" onclick="exportData()"><span>⬆</span> Export Backup</div>
+      <div class="dots-item" onclick="document.getElementById('import-input').click()"><span>⬇</span> Import Backup</div>
+      <input type="file" id="import-input" accept=".json" style="display:none" onchange="importData(event)">
+    </div>
   </div>
 
   <!-- Tab bar -->
@@ -236,13 +277,12 @@ body {
     <div class="tab active" id="tab-bonus" onclick="switchTab('bonus')">Bonus Progress</div>
   </div>
 
-  <!-- Scrollable screen -->
+  <!-- Screen -->
   <div class="screen" id="mainScreen">
 
     <!-- ════ BONUS PAGE ════ -->
     <div class="bonus-page" id="page-bonus">
 
-      <!-- KPI card -->
       <div class="g-card">
         <div class="g-label">Total Bonus Accrued</div>
         <div class="g-big" id="b-total">—</div>
@@ -250,7 +290,6 @@ body {
         <div class="g-sub"><span>Remaining</span><strong id="b-remaining">—</strong></div>
       </div>
 
-      <!-- Target row -->
       <div class="target-row">
         <div class="target-left">
           <div class="target-lbl">Monthly Target</div>
@@ -262,7 +301,6 @@ body {
         <button class="add-entry-btn" onclick="openKeypad()">+ Add Entry</button>
       </div>
 
-      <!-- 5-year progress bar -->
       <div class="prog-section">
         <div class="prog-lbl">5-Year Progress</div>
         <div class="prog-track">
@@ -277,12 +315,11 @@ body {
         <div id="schedule-badge"></div>
       </div>
 
-      <!-- Logs -->
       <div class="logs-wrap">
         <div class="logs-hdr">
           <div class="logs-title">Transaction Log</div>
           <div class="year-row">
-            <div class="yr-pill active" id="yr-current" onclick="setLogYear('current')"></div>
+            <div class="yr-pill active" id="yr-current" onclick="setLogYear(String(new Date().getFullYear()))"></div>
             <div class="yr-prev" onclick="togglePriorDropdown()">◀ Prior Years</div>
             <div class="prior-dropdown" id="prior-dropdown"></div>
           </div>
@@ -295,32 +332,31 @@ body {
     <!-- ════ LOAN PAGE ════ -->
     <div class="loan-page" id="page-loan" style="display:none;">
 
-      <!-- Balance card -->
       <div class="l-card">
         <div class="l-lbl">Current Balance Owed</div>
         <div class="l-big" id="l-balance">—</div>
         <div class="l-divider"></div>
         <div class="l-sub"><span>Total charged</span><strong id="l-charged">—</strong></div>
-        <div class="l-sub"><span>Total paid</span><strong id="l-paid" style="color:#86efac;">—</strong></div>
+        <div class="l-sub"><span>Total paid</span><strong id="l-paid">—</strong></div>
         <div class="l-sub"><span>Last entry</span><strong id="l-last-date">—</strong></div>
         <div class="l-sub"><span>Net this month</span><strong id="l-month-net">—</strong></div>
       </div>
 
-      <!-- Add form -->
       <div class="l-form">
         <div class="l-form-lbl">+ Add Transaction</div>
         <input class="l-field" id="l-date-display" type="text" readonly placeholder="Tap to pick date" onclick="openCal()">
-        <input class="l-field" id="l-desc" type="text" placeholder="Description">
-        <div class="l-row2">
-          <input class="l-field" id="l-amt" type="number" step="0.01" placeholder="Amount (neg = payment)" style="margin-bottom:0; flex:1;">
-          <button class="l-add-btn" onclick="addLoanEntry()">Add</button>
+        <input class="l-field" id="l-desc" type="text" placeholder="Description" autocomplete="off">
+        <div class="l-amt-row">
+          <input class="l-amt-field" id="l-amt" type="number" inputmode="decimal" step="0.01" placeholder="Amount (neg = payment)">
+          <button class="l-confirm-btn" onclick="addLoanEntry()">Confirm</button>
         </div>
         <div class="l-hint">Negative = payment / credit &nbsp;·&nbsp; Positive = charge</div>
       </div>
 
-      <!-- Transaction log -->
       <div class="l-log-wrap">
-        <div class="l-log-hdr">Transaction History (most recent first)</div>
+        <div class="l-log-hdr">
+          <div class="l-log-title">Transaction History (most recent first)</div>
+        </div>
         <div id="loan-log-list"></div>
       </div>
 
@@ -329,7 +365,7 @@ body {
   </div><!-- /screen -->
 </div><!-- /phone -->
 
-<!-- ═══ Urine Keypad overlay ═══ -->
+<!-- Urine Keypad overlay -->
 <div class="kp-overlay" id="kp-overlay" onclick="handleKpOverlayClick(event)">
   <div class="kp-sheet">
     <div class="kp-handle"></div>
@@ -337,7 +373,6 @@ body {
       <div class="kp-top-lbl">Add Bonus Entry</div>
       <div class="kp-x" onclick="closeKeypad()">✕</div>
     </div>
-
     <div class="kp-display">
       <div class="kd-box active" id="kd-hrs-box" onclick="setKpField('hrs')">
         <div class="kd-lbl">Hours</div>
@@ -350,12 +385,10 @@ body {
         <div class="kd-sub" id="kd-calc">= $0.00</div>
       </div>
     </div>
-
     <div class="adj-row">
       <div class="tog on" id="adj-tog" onclick="toggleAdj()"></div>
       <span id="adj-label">Adjust moving forward (rate pre-filled)</span>
     </div>
-
     <div class="kp-grid">
       <div class="kp-key" onclick="kpPress('1')">1</div>
       <div class="kp-key" onclick="kpPress('2')">2<div class="sub">ABC</div></div>
@@ -369,12 +402,12 @@ body {
       <div class="kp-key" onclick="kpPress('.')">.</div>
       <div class="kp-key" onclick="kpPress('0')">0</div>
       <div class="kp-key" onclick="kpPress('back')">⌫</div>
-      <button class="kp-add" onclick="commitBonusEntry()">ADD ENTRY</button>
+      <button class="kp-add" onclick="commitBonusEntry()">CONFIRM ENTRY</button>
     </div>
   </div>
 </div>
 
-<!-- ═══ Calendar overlay ═══ -->
+<!-- Calendar overlay -->
 <div class="cal-overlay" id="cal-overlay" onclick="handleCalOverlayClick(event)">
   <div class="cal-sheet">
     <div class="cal-nav">
@@ -387,35 +420,11 @@ body {
   </div>
 </div>
 
-
-<!-- ═══ Backup / Restore Bar ═══ -->
-<div id="backup-bar" style="
-  position:fixed; bottom:0; left:50%; transform:translateX(-50%);
-  width:390px; background:rgba(10,10,20,0.97);
-  border-top:1px solid rgba(255,255,255,0.12);
-  display:flex; gap:0; z-index:400; padding:10px 14px 22px;
-  justify-content:space-between; align-items:center;
-">
-  <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.4);font-family:'DM Mono',monospace;">Data</div>
-  <div style="display:flex;gap:8px;">
-    <button onclick="exportData()" style="
-      background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);
-      color:#fff;border-radius:9px;padding:7px 16px;font-size:11px;font-weight:700;
-      font-family:'Syne',sans-serif;cursor:pointer;letter-spacing:.03em;
-    ">⬆ Export</button>
-    <button onclick="document.getElementById('import-input').click()" style="
-      background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);
-      color:#fff;border-radius:9px;padding:7px 16px;font-size:11px;font-weight:700;
-      font-family:'Syne',sans-serif;cursor:pointer;letter-spacing:.03em;
-    ">⬇ Import</button>
-    <input type="file" id="import-input" accept=".json" style="display:none" onchange="importData(event)">
-  </div>
-</div>
-
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
 <script>
+
 // ──────────────────────────────
 // SEED DATA
 // ──────────────────────────────
@@ -1003,6 +1012,16 @@ function importData(event) {
   reader.readAsText(file);
 }
 
+
+
+// ── Dots menu toggle ──
+function toggleDotsMenu(e) {
+  e.stopPropagation();
+  document.getElementById('dots-menu').classList.toggle('open');
+}
+document.addEventListener('click', function() {
+  document.getElementById('dots-menu').classList.remove('open');
+});
 </script>
 </body>
 </html>
