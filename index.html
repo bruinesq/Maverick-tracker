@@ -51,8 +51,8 @@ body {
 .tab-bar .tab.active { color:#fff; border-bottom-color:#fff; }
 
 /* ── Page backgrounds ── */
-.bonus-page { background:var(--bonus-bg); min-height:calc(100vh - 88px); padding-bottom:80px; }
-.loan-page  { background:var(--loan-bg);  min-height:calc(100vh - 88px); padding-bottom:80px; }
+.bonus-page { background:var(--bonus-bg); min-height:calc(100vh - 88px); padding-bottom:120px; }
+.loan-page  { background:var(--loan-bg);  min-height:calc(100vh - 88px); padding-bottom:120px; }
 
 /* ── Glass card ── */
 .g-card { background:var(--glass); border:1px solid var(--card-border); border-radius:16px; margin:12px 14px; padding:14px 16px; color:#fff; }
@@ -384,6 +384,31 @@ body {
     </div>
     <div class="cal-grid" id="cal-grid"></div>
     <button class="cal-cancel" onclick="closeCal()">Cancel</button>
+  </div>
+</div>
+
+
+<!-- ═══ Backup / Restore Bar ═══ -->
+<div id="backup-bar" style="
+  position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+  width:390px; background:rgba(10,10,20,0.97);
+  border-top:1px solid rgba(255,255,255,0.12);
+  display:flex; gap:0; z-index:400; padding:10px 14px 22px;
+  justify-content:space-between; align-items:center;
+">
+  <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.4);font-family:'DM Mono',monospace;">Data</div>
+  <div style="display:flex;gap:8px;">
+    <button onclick="exportData()" style="
+      background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);
+      color:#fff;border-radius:9px;padding:7px 16px;font-size:11px;font-weight:700;
+      font-family:'Syne',sans-serif;cursor:pointer;letter-spacing:.03em;
+    ">⬆ Export</button>
+    <button onclick="document.getElementById('import-input').click()" style="
+      background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);
+      color:#fff;border-radius:9px;padding:7px 16px;font-size:11px;font-weight:700;
+      font-family:'Syne',sans-serif;cursor:pointer;letter-spacing:.03em;
+    ">⬇ Import</button>
+    <input type="file" id="import-input" accept=".json" style="display:none" onchange="importData(event)">
   </div>
 </div>
 
@@ -913,6 +938,71 @@ updateClock(); setInterval(updateClock,10000);
 // ──────────────────────────────
 initDateField();
 renderBonus(); // default tab is bonus
+
+// ──────────────────────────────
+// EXPORT / IMPORT
+// ──────────────────────────────
+function exportData() {
+  const payload = {
+    version: 3,
+    exportedAt: new Date().toISOString(),
+    loan:    loanData,
+    bonus:   bonusData,
+    targets: targetLog,
+    adjRate: adjRate,
+    adjEnabled: adjEnabled
+  };
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const now  = new Date();
+  const stamp = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  a.href     = url;
+  a.download = 'maverick_backup_'+stamp+'.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Backup saved to your Files app ✓');
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.loan || !data.bonus) {
+        showToast('Invalid backup file.'); return;
+      }
+      if (!confirm('This will replace ALL current data with the backup. Continue?')) return;
+      loanData    = data.loan    || [];
+      bonusData   = data.bonus   || [];
+      targetLog   = data.targets || SEED_TARGETS;
+      adjRate     = data.adjRate     || 33;
+      adjEnabled  = data.adjEnabled  !== undefined ? data.adjEnabled : true;
+      loanNextId  = loanData.length  ? Math.max(...loanData.map(r=>r.id||0))  + 1 : 0;
+      bonusNextId = bonusData.length ? Math.max(...bonusData.map(r=>r.id||0)) + 1 : 0;
+      save('mv_loan_v3',    loanData);
+      save('mv_bonus_v3',   bonusData);
+      save('mv_targets_v3', targetLog);
+      save('mv_adjrate',    adjRate);
+      save('mv_adj',        adjEnabled);
+      // Re-render whichever tab is active
+      const bonusVisible = document.getElementById('page-bonus').style.display !== 'none';
+      if (bonusVisible) renderBonus(); else renderLoan();
+      showToast('Data restored from backup ✓');
+    } catch(err) {
+      showToast('Could not read file. Is it a valid backup?');
+    }
+    // Reset file input so same file can be re-imported if needed
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
 </script>
 </body>
 </html>
