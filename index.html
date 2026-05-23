@@ -484,8 +484,12 @@ body {
       <div class="lkp-top-lbl">Add Transaction</div>
       <div class="lkp-x" onclick="closeLoanKeypad()">✕</div>
     </div>
-    <!-- Description -->
+    <!-- Date + Description -->
     <div class="lkp-desc-wrap">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-size:12px;font-weight:700;color:#555;font-family:'DM Mono',monospace;" id="lkp-date-lbl"></span>
+        <button onclick="openCalFromKeypad()" style="background:rgba(0,0,0,.06);border:1px solid #ddd;color:#333;border-radius:8px;padding:4px 12px;font-size:11px;font-weight:700;cursor:pointer;">📅 Change Date</button>
+      </div>
       <input class="lkp-desc" id="lkp-desc" type="text" placeholder="Description (e.g. Payment, Rental…)" autocomplete="off">
     </div>
     <!-- Amount display with +/- toggle -->
@@ -958,6 +962,7 @@ let selectedDate = todayStr();
 // init display
 function initDateField() {
   const el = document.getElementById('l-date-display');
+  if(!el) return; // element removed in v3 — loan keypad handles date internally
   el.value = fmtDateUS(todayStr());
   el.dataset.isoDate = todayStr();
 }
@@ -999,9 +1004,11 @@ function renderCal() {
 }
 function pickDay(iso) {
   selectedDate = iso;
+  lkpDate = iso;
   const el = document.getElementById('l-date-display');
-  el.value = fmtDateUS(iso);
-  el.dataset.isoDate = iso;
+  if(el) { el.value = fmtDateUS(iso); el.dataset.isoDate = iso; }
+  const lbl = document.getElementById('lkp-date-lbl');
+  if(lbl) lbl.textContent = 'Date: ' + fmtDateUS(iso);
   closeCal();
 }
 
@@ -1133,14 +1140,21 @@ function openLoanKeypad() {
   lkpValue = '';
   lkpSign  = 1;
   lkpDate  = todayStr();
+  selectedDate = lkpDate;
   document.getElementById('lkp-desc').value = '';
+  document.getElementById('lkp-date-lbl').textContent = 'Date: ' + fmtDateUS(lkpDate);
   updateLkpDisplay();
   document.getElementById('lkp-overlay').classList.add('open');
-  // focus description first
   setTimeout(()=>{ document.getElementById('lkp-desc').focus(); }, 350);
 }
 function closeLoanKeypad() {
   document.getElementById('lkp-overlay').classList.remove('open');
+}
+function openCalFromKeypad() {
+  // Open calendar; pickDay will set lkpDate and update label
+  calDate = new Date(TODAY);
+  renderCal();
+  document.getElementById('cal-overlay').classList.add('open');
 }
 function handleLkpOverlayClick(e) {
   if(e.target === document.getElementById('lkp-overlay')) closeLoanKeypad();
