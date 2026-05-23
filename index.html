@@ -329,7 +329,8 @@ body {
   <!-- Status bar -->
   <div class="status-bar blue" id="statusBar" style="position:relative;">
     <span id="clockDisplay">9:41</span>
-    <div class="status-right">
+    <div class="status-right" style="display:flex;align-items:center;gap:8px;">
+      <span id="sync-status" style="font-size:9px;font-family:'DM Mono',monospace;color:rgba(255,255,255,0.7);"></span>
       <button class="dots-btn" onclick="toggleDotsMenu(event)">···</button>
     </div>
     <!-- Dots menu -->
@@ -537,6 +538,138 @@ body {
 <div class="toast" id="toast"></div>
 
 <script>
+
+// ══════════════════════════════════════
+// SUPABASE CONFIG
+// ══════════════════════════════════════
+const SUPA_URL = 'https://ynuvaluhipgfmpxheenl.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InludXZhbHVoaXBnZm1weGhlZW5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NTEzMTgsImV4cCI6MjA5NTEyNzMxOH0.hVhsSTQxXpwCk-aa8Q8Pm01Agi5zPtYUfzTQaSlGKqY';
+
+// Supabase REST helper
+async function sbRequest(method, table, body=null, params='') {
+  const url = `${SUPA_URL}/rest/v1/${table}${params}`;
+  const opts = {
+    method,
+    headers: {
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': params.includes('on_conflict') ? 'resolution=merge-duplicates,return=representation' : 'return=representation'
+    }
+  };
+  if(body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  if(!res.ok) {
+    const err = await res.text();
+    throw new Error(`Supabase ${method} ${table} failed: ${res.status} ${err}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : [];
+}
+
+// CRUD wrappers
+const sb = {
+  // Loan
+  async getLoan()          { return sbRequest('GET',    'loan_transactions', null, '?order=date.asc'); },
+  async insertLoan(row)    { return sbRequest('POST',   'loan_transactions', row); },
+  async deleteLoan(id)     { return sbRequest('DELETE', 'loan_transactions', null, `?id=eq.${id}`); },
+  async upsertLoan(rows)   { return sbRequest('POST',   'loan_transactions', rows, '?on_conflict=id'); },
+
+  // Bonus
+  async getBonus()         { return sbRequest('GET',    'bonus_entries', null, '?order=date.asc'); },
+  async insertBonus(row)   { return sbRequest('POST',   'bonus_entries', row); },
+  async deleteBonus(id)    { return sbRequest('DELETE', 'bonus_entries', null, `?id=eq.${id}`); },
+  async upsertBonus(rows)  { return sbRequest('POST',   'bonus_entries', rows, '?on_conflict=id'); },
+
+  // Settings (key-value store)
+  async getSetting(key) {
+    const r = await sbRequest('GET', 'app_settings', null, `?key=eq.${key}`);
+    return r.length ? JSON.parse(r[0].value) : null;
+  },
+  async setSetting(key, val) {
+    return sbRequest('POST', 'app_settings',
+      {key, value: JSON.stringify(val)},
+      '?on_conflict=key');
+  }
+};
+
+// Sync state flag
+let syncReady = false;
+
+// ══════════════════════════════════════
+// INIT FROM SUPABASE (replaces localStorage seed logic)
+// ══════════════════════════════════════
+async function initFromSupabase() {
+  showSyncStatus('Connecting to database…');
+  try {
+    // Load all three data sets in parallel
+    const [loanRows, bonusRows, targets, adjRateVal, adjEnabledVal] = await Promise.all([
+      sb.getLoan(),
+      sb.getBonus(),
+      sb.getSetting('targets'),
+      sb.getSetting('adjRate'),
+      sb.getSetting('adjEnabled')
+    ]);
+
+    if(loanRows.length === 0) {
+      // First run — seed Supabase with local data
+      showSyncStatus('First run — seeding database…');
+      await seedSupabase();
+    } else {
+      loanData  = loanRows;
+      bonusData = bonusRows;
+      if(targets)      targetLog  = targets;
+      if(adjRateVal !== null)    adjRate    = adjRateVal;
+      if(adjEnabledVal !== null) adjEnabled = adjEnabledVal;
+      loanNextId  = loanData.length  ? Math.max(...loanData.map(r=>r.id))  + 1 : 1;
+      bonusNextId = bonusData.length ? Math.max(...bonusData.map(r=>r.id)) + 1 : 1;
+      // Also update localStorage as offline cache
+      save('mv_loan_v3',    loanData);
+      save('mv_bonus_v3',   bonusData);
+      save('mv_targets_v3', targetLog);
+    }
+    syncReady = true;
+    showSyncStatus('✓ Synced', true);
+    renderBonus();
+  } catch(err) {
+    console.error('Supabase init failed:', err);
+    showSyncStatus('Offline — using local data', false, true);
+    // Fall back to localStorage
+    syncReady = false;
+    renderBonus();
+  }
+}
+
+async function seedSupabase() {
+  // Insert all seed loan data
+  const loanWithIds = SEED_LOAN.map((r,i) => ({...r, id:i+1}));
+  const bonusWithIds = SEED_BONUS.map((r,i) => ({...r, id:i+1}));
+  await Promise.all([
+    sbRequest('POST', 'loan_transactions', loanWithIds, '?on_conflict=id'),
+    sbRequest('POST', 'bonus_entries',     bonusWithIds, '?on_conflict=id'),
+    sb.setSetting('targets',    targetLog),
+    sb.setSetting('adjRate',    adjRate),
+    sb.setSetting('adjEnabled', adjEnabled)
+  ]);
+  loanData  = loanWithIds;
+  bonusData = bonusWithIds;
+  loanNextId  = loanData.length  + 1;
+  bonusNextId = bonusData.length + 1;
+  save('mv_loan_v3',    loanData);
+  save('mv_bonus_v3',   bonusData);
+  save('mv_targets_v3', targetLog);
+}
+
+// ══════════════════════════════════════
+// SYNC STATUS INDICATOR
+// ══════════════════════════════════════
+function showSyncStatus(msg, success=false, warn=false) {
+  const el = document.getElementById('sync-status');
+  if(!el) return;
+  el.textContent = msg;
+  el.style.color = success ? '#4ade80' : warn ? '#fde68a' : 'rgba(255,255,255,0.7)';
+}
+
 
 // ──────────────────────────────
 // SEED DATA
@@ -842,18 +975,26 @@ function renderLoan() {
 // ──────────────────────────────
 function addLoanEntry() { openLoanKeypad(); } // legacy stub
 
-function deleteLoan(id) {
+async function deleteLoan(id) {
   if(!confirm('Delete this transaction?')) return;
   loanData = loanData.filter(r=>r.id!==id);
   save('mv_loan_v3', loanData);
   renderLoan();
+  if(syncReady) {
+    try { await sb.deleteLoan(id); }
+    catch(e) { console.warn('Supabase delete loan failed:', e); }
+  }
 }
 
-function deleteBonus(id) {
+async function deleteBonus(id) {
   if(!confirm('Delete this entry?')) return;
   bonusData = bonusData.filter(r=>r.id!==id);
   save('mv_bonus_v3', bonusData);
   renderBonus();
+  if(syncReady) {
+    try { await sb.deleteBonus(id); }
+    catch(e) { console.warn('Supabase delete bonus failed:', e); }
+  }
 }
 
 // ──────────────────────────────
@@ -870,6 +1011,7 @@ function openTargetEdit() {
   targetLog = targetLog.filter(t=>t.effectiveDate!==effective);
   targetLog.push({effectiveDate:effective, amount:+parsed.toFixed(2)});
   save('mv_targets_v3', targetLog);
+  if(syncReady) sb.setSetting('targets', targetLog).catch(e=>console.warn(e));
   showToast(`Target updated to $${parsed.toFixed(2)} from ${effective} forward ✓`);
   renderBonus();
 }
@@ -940,17 +1082,26 @@ function toggleAdj() {
     : 'Adjust moving forward (off)';
 }
 
-function commitBonusEntry() {
+async function commitBonusEntry() {
   const hrs  = parseFloat(kpHrs);
   const rate = parseFloat(kpRate);
   if(!hrs||hrs<=0||!rate||rate<=0) { showToast('Enter valid hours and rate.'); return; }
-  if(adjEnabled) { adjRate=+rate.toFixed(2); save('mv_adjrate', adjRate); }
-  bonusData.push({id:bonusNextId++, date:todayStr(), hrs:+hrs, rate:+rate.toFixed(2)});
+  if(adjEnabled) {
+    adjRate = +rate.toFixed(2);
+    save('mv_adjrate', adjRate);
+    if(syncReady) sb.setSetting('adjRate', adjRate).catch(e=>console.warn(e));
+  }
+  const newRow = {id:bonusNextId++, date:todayStr(), hrs:+hrs, rate:+rate.toFixed(2)};
+  bonusData.push(newRow);
   save('mv_bonus_v3', bonusData);
   closeKeypad();
   logYear = String(TODAY.getFullYear());
   renderBonus();
   showToast(`Entry added: ${hrs} hrs @ $${rate}/hr ✓`);
+  if(syncReady) {
+    try { await sb.insertBonus(newRow); }
+    catch(e) { console.warn('Supabase bonus sync failed:', e); }
+  }
 }
 
 // ──────────────────────────────
@@ -1052,12 +1203,20 @@ updateClock(); setInterval(updateClock,10000);
 // INIT
 // ──────────────────────────────
 initDateField();
-renderBonus(); // default tab is bonus
+initFromSupabase(); // load from Supabase, fall back to localStorage
 
 // ──────────────────────────────
 // EXPORT / IMPORT
 // ──────────────────────────────
-function exportData() {
+async function exportData() {
+  // Pull fresh from Supabase if available
+  if(syncReady) {
+    try {
+      const [fresh_loan, fresh_bonus] = await Promise.all([sb.getLoan(), sb.getBonus()]);
+      if(fresh_loan.length)  loanData  = fresh_loan;
+      if(fresh_bonus.length) bonusData = fresh_bonus;
+    } catch(e) { console.warn('Export: using cached data', e); }
+  }
   const payload = {
     version: 3,
     exportedAt: new Date().toISOString(),
@@ -1109,6 +1268,23 @@ function importData(event) {
       const bonusVisible = document.getElementById('page-bonus').style.display !== 'none';
       if (bonusVisible) renderBonus(); else renderLoan();
       showToast('Data restored from backup ✓');
+      // Push to Supabase in background
+      if(syncReady) {
+        try {
+          await Promise.all([
+            sbRequest('DELETE','loan_transactions',null,'?id=gte.1'),
+            sbRequest('DELETE','bonus_entries',null,'?id=gte.1')
+          ]);
+          await Promise.all([
+            sbRequest('POST','loan_transactions',loanData,'?on_conflict=id'),
+            sbRequest('POST','bonus_entries',bonusData,'?on_conflict=id'),
+            sb.setSetting('targets',targetLog),
+            sb.setSetting('adjRate',adjRate),
+            sb.setSetting('adjEnabled',adjEnabled)
+          ]);
+          showToast('Backup restored & synced to cloud ✓');
+        } catch(e) { console.warn('Supabase import sync failed:', e); }
+      }
     } catch(err) {
       showToast('Could not read file. Is it a valid backup?');
     }
@@ -1192,17 +1368,25 @@ function updateLkpDisplay() {
   btn.className    = 'lkp-sign-btn ' + (isNeg ? 'negative' : 'positive');
 }
 
-function commitLoanEntry() {
+async function commitLoanEntry() {
   const desc = document.getElementById('lkp-desc').value.trim();
   const num  = parseFloat(lkpValue);
-  if(!desc)       { showToast('Please enter a description.'); return; }
-  if(!num || num <= 0) { showToast('Please enter an amount.'); return; }
+  if(!desc)            { showToast('Please enter a description.'); return; }
+  if(!num || num <= 0) { showToast('Please enter an amount.');     return; }
   const finalAmt = +(num * lkpSign).toFixed(2);
-  loanData.push({ id:loanNextId++, date:lkpDate, desc, amt:finalAmt });
+  const newRow = { id: loanNextId++, date: lkpDate, desc, amt: finalAmt };
+  loanData.push(newRow);
   save('mv_loan_v3', loanData);
   closeLoanKeypad();
   renderLoan();
-  showToast((lkpSign === -1 ? 'Payment' : 'Charge') + ' added: ' + fmt$(Math.abs(finalAmt)) + ' ✓');
+  const label = lkpSign === -1 ? 'Payment' : 'Charge';
+  showToast(label + ' added: ' + fmt$(Math.abs(finalAmt)) + ' ✓');
+  // Sync to Supabase in background
+  if(syncReady) {
+    try {
+      await sb.insertLoan(newRow);
+    } catch(e) { console.warn('Supabase loan sync failed:', e); }
+  }
 }
 
 </script>
