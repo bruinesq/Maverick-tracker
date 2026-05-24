@@ -330,8 +330,7 @@ body {
   <div class="status-bar blue" id="statusBar" style="position:relative;">
     <span id="clockDisplay">9:41</span>
     <div class="status-right" style="display:flex;align-items:center;gap:8px;">
-      <span id="sync-status" style="font-size:9px;font-family:'DM Mono',monospace;color:rgba(255,255,255,0.7);"></span>
-      <button class="dots-btn" onclick="toggleDotsMenu(event)">···</button>
+<button class="dots-btn" onclick="toggleDotsMenu(event)">···</button>
     </div>
     <!-- Dots menu -->
     <div class="dots-menu" id="dots-menu">
@@ -537,148 +536,7 @@ body {
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
-<script>
-
-// ══════════════════════════════════════
-// SUPABASE
-// ══════════════════════════════════════
-const SUPA_URL = 'https://ynuvaluhipgfmpxheenl.supabase.co';
-const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InludXZhbHVoaXBnZm1weGhlZW5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NTEzMTgsImV4cCI6MjA5NTEyNzMxOH0.hVhsSTQxXpwCk-aa8Q8Pm01Agi5zPtYUfzTQaSlGKqY';
-let syncReady = false;
-
-function supaHeaders() {
-  return {
-    'apikey': SUPA_KEY,
-    'Authorization': 'Bearer ' + SUPA_KEY,
-    'Content-Type': 'application/json'
-  };
-}
-
-async function supaGet(table, query) {
-  const r = await fetch(SUPA_URL + '/rest/v1/' + table + '?' + query, {
-    headers: supaHeaders()
-  });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
-}
-
-async function supaPost(table, body) {
-  const r = await fetch(SUPA_URL + '/rest/v1/' + table, {
-    method: 'POST',
-    headers: { ...supaHeaders(), 'Prefer': 'return=minimal' },
-    body: JSON.stringify(body)
-  });
-  if (!r.ok) throw new Error(await r.text());
-}
-
-async function supaDelete(table, query) {
-  const r = await fetch(SUPA_URL + '/rest/v1/' + table + '?' + query, {
-    method: 'DELETE',
-    headers: supaHeaders()
-  });
-  if (!r.ok) throw new Error(await r.text());
-}
-
-// Settings helpers
-async function supaGetSetting(key) {
-  const rows = await supaGet('app_settings', 'key=eq.' + key);
-  return rows.length ? JSON.parse(rows[0].value) : null;
-}
-async function supaSetSetting(key, val) {
-  // Delete then insert (simplest upsert without needing unique constraint setup)
-  await supaDelete('app_settings', 'key=eq.' + key);
-  await supaPost('app_settings', { key: key, value: JSON.stringify(val) });
-}
-
-// ── Init: load from Supabase, fall back to localStorage ──
-async function initFromSupabase() {
-  setSyncLabel('Connecting…');
-  try {
-    const [loanRows, bonusRows] = await Promise.all([
-      supaGet('loan_transactions', 'order=date.asc'),
-      supaGet('bonus_entries',     'order=date.asc')
-    ]);
-
-    if (loanRows.length === 0) {
-      // First time — seed database
-      setSyncLabel('Seeding database…');
-      await seedSupabase();
-    } else {
-      loanData  = loanRows.map(r => ({...r, desc: r.description || r.desc}));
-      bonusData = bonusRows;
-      // Load settings
-      try {
-        const [tgt, aRate, aEn] = await Promise.all([
-          supaGetSetting('targets'),
-          supaGetSetting('adjRate'),
-          supaGetSetting('adjEnabled')
-        ]);
-        if (tgt   !== null) targetLog  = tgt;
-        if (aRate !== null) adjRate    = aRate;
-        if (aEn   !== null) adjEnabled = aEn;
-      } catch(e) { /* settings optional */ }
-      loanNextId  = Math.max(0, ...loanData.map(r => r.id))  + 1;
-      bonusNextId = Math.max(0, ...bonusData.map(r => r.id)) + 1;
-      save('mv_loan_v3',    loanData);
-      save('mv_bonus_v3',   bonusData);
-    }
-    syncReady = true;
-    setSyncLabel('✓ Synced');
-  } catch(err) {
-    console.error('Supabase:', err);
-    setSyncLabel('Offline mode');
-    syncReady = false;
-  }
-  renderBonus();
-}
-
-async function seedSupabase() {
-  const lRows = SEED_LOAN.map((r, i)  => ({ id: i+1, date: r.date, description: r.desc, amt: r.amt }));
-  const bRows = SEED_BONUS.map((r, i) => ({ id: i+1, date: r.date, hrs: r.hrs, rate: r.rate }));
-  await supaPost('loan_transactions', lRows);
-  await supaPost('bonus_entries',     bRows);
-  loanData  = SEED_LOAN.map((r, i)  => ({ ...r, id: i+1 }));
-  bonusData = SEED_BONUS.map((r, i) => ({ ...r, id: i+1 }));
-  loanNextId  = loanData.length  + 1;
-  bonusNextId = bonusData.length + 1;
-  save('mv_loan_v3',  loanData);
-  save('mv_bonus_v3', bonusData);
-}
-
-function setSyncLabel(msg) {
-  const el = document.getElementById('sync-status');
-  if (el) el.textContent = msg;
-}
-
-// Background sync helpers (fire and forget)
-function syncAddLoan(row) {
-  if (!syncReady) return;
-  supaPost('loan_transactions', { id: row.id, date: row.date, description: row.desc, amt: row.amt })
-    .catch(e => console.warn('sync loan add:', e));
-}
-function syncDelLoan(id) {
-  if (!syncReady) return;
-  supaDelete('loan_transactions', 'id=eq.' + id)
-    .catch(e => console.warn('sync loan del:', e));
-}
-function syncAddBonus(row) {
-  if (!syncReady) return;
-  supaPost('bonus_entries', { id: row.id, date: row.date, hrs: row.hrs, rate: row.rate })
-    .catch(e => console.warn('sync bonus add:', e));
-}
-function syncDelBonus(id) {
-  if (!syncReady) return;
-  supaDelete('bonus_entries', 'id=eq.' + id)
-    .catch(e => console.warn('sync bonus del:', e));
-}
-function syncSettings() {
-  if (!syncReady) return;
-  supaSetSetting('targets',    targetLog).catch(e => console.warn(e));
-  supaSetSetting('adjRate',    adjRate).catch(e => console.warn(e));
-  supaSetSetting('adjEnabled', adjEnabled).catch(e => console.warn(e));
-}
-
-// ──────────────────────────────
+<script>// ──────────────────────────────
 // SEED DATA
 // ──────────────────────────────
 const SEED_LOAN = [
@@ -986,7 +844,6 @@ function deleteLoan(id) {
   if(!confirm('Delete this transaction?')) return;
   loanData = loanData.filter(r=>r.id!==id);
   save('mv_loan_v3', loanData);
-  syncDelLoan(id);
   renderLoan();
 }
 
@@ -994,7 +851,6 @@ function deleteBonus(id) {
   if(!confirm('Delete this entry?')) return;
   bonusData = bonusData.filter(r=>r.id!==id);
   save('mv_bonus_v3', bonusData);
-  syncDelBonus(id);
   renderBonus();
 }
 
@@ -1012,7 +868,6 @@ function openTargetEdit() {
   targetLog = targetLog.filter(t=>t.effectiveDate!==effective);
   targetLog.push({effectiveDate:effective, amount:+parsed.toFixed(2)});
   save('mv_targets_v3', targetLog);
-  syncSettings();
   showToast(`Target updated to $${parsed.toFixed(2)} from ${effective} forward ✓`);
   renderBonus();
 }
@@ -1090,12 +945,10 @@ function commitBonusEntry() {
   if(adjEnabled) {
     adjRate = +rate.toFixed(2);
     save('mv_adjrate', adjRate);
-    syncSettings();
   }
   const newRow = {id:bonusNextId++, date:todayStr(), hrs:+hrs, rate:+rate.toFixed(2)};
   bonusData.push(newRow);
   save('mv_bonus_v3', bonusData);
-  syncAddBonus(newRow);
   closeKeypad();
   logYear = String(TODAY.getFullYear());
   renderBonus();
@@ -1201,7 +1054,7 @@ updateClock(); setInterval(updateClock,10000);
 // INIT
 // ──────────────────────────────
 initDateField();
-initFromSupabase(); // load from Supabase, fall back to localStorage
+renderBonus();
 
 // ──────────────────────────────
 // EXPORT / IMPORT
@@ -1352,7 +1205,6 @@ function commitLoanEntry() {
   const newRow = { id: loanNextId++, date: lkpDate, desc, amt: finalAmt };
   loanData.push(newRow);
   save('mv_loan_v3', loanData);
-  syncAddLoan(newRow);
   closeLoanKeypad();
   renderLoan();
   const label = lkpSign === -1 ? 'Payment' : 'Charge';
