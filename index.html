@@ -540,136 +540,143 @@ body {
 <script>
 
 // ══════════════════════════════════════
-// SUPABASE CONFIG
+// SUPABASE
 // ══════════════════════════════════════
 const SUPA_URL = 'https://ynuvaluhipgfmpxheenl.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InludXZhbHVoaXBnZm1weGhlZW5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NTEzMTgsImV4cCI6MjA5NTEyNzMxOH0.hVhsSTQxXpwCk-aa8Q8Pm01Agi5zPtYUfzTQaSlGKqY';
-
-// Supabase REST helper
-async function sbRequest(method, table, body=null, params='') {
-  const url = `${SUPA_URL}/rest/v1/${table}${params}`;
-  const opts = {
-    method,
-    headers: {
-      'apikey': SUPA_KEY,
-      'Authorization': 'Bearer ' + SUPA_KEY,
-      'Content-Type': 'application/json',
-      'Prefer': params.includes('on_conflict') ? 'resolution=merge-duplicates,return=representation' : 'return=representation'
-    }
-  };
-  if(body) opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  if(!res.ok) {
-    const err = await res.text();
-    throw new Error(`Supabase ${method} ${table} failed: ${res.status} ${err}`);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : [];
-}
-
-// CRUD wrappers
-const sb = {
-  // Loan
-  async getLoan()          { return sbRequest('GET',    'loan_transactions', null, '?order=date.asc'); },
-  async insertLoan(row)    { return sbRequest('POST',   'loan_transactions', row); },
-  async deleteLoan(id)     { return sbRequest('DELETE', 'loan_transactions', null, `?id=eq.${id}`); },
-  async upsertLoan(rows)   { return sbRequest('POST',   'loan_transactions', rows, '?on_conflict=id'); },
-
-  // Bonus
-  async getBonus()         { return sbRequest('GET',    'bonus_entries', null, '?order=date.asc'); },
-  async insertBonus(row)   { return sbRequest('POST',   'bonus_entries', row); },
-  async deleteBonus(id)    { return sbRequest('DELETE', 'bonus_entries', null, `?id=eq.${id}`); },
-  async upsertBonus(rows)  { return sbRequest('POST',   'bonus_entries', rows, '?on_conflict=id'); },
-
-  // Settings (key-value store)
-  async getSetting(key) {
-    const r = await sbRequest('GET', 'app_settings', null, `?key=eq.${key}`);
-    return r.length ? JSON.parse(r[0].value) : null;
-  },
-  async setSetting(key, val) {
-    return sbRequest('POST', 'app_settings',
-      {key, value: JSON.stringify(val)},
-      '?on_conflict=key');
-  }
-};
-
-// Sync state flag
 let syncReady = false;
 
-// ══════════════════════════════════════
-// INIT FROM SUPABASE (replaces localStorage seed logic)
-// ══════════════════════════════════════
+function supaHeaders() {
+  return {
+    'apikey': SUPA_KEY,
+    'Authorization': 'Bearer ' + SUPA_KEY,
+    'Content-Type': 'application/json'
+  };
+}
+
+async function supaGet(table, query) {
+  const r = await fetch(SUPA_URL + '/rest/v1/' + table + '?' + query, {
+    headers: supaHeaders()
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function supaPost(table, body) {
+  const r = await fetch(SUPA_URL + '/rest/v1/' + table, {
+    method: 'POST',
+    headers: { ...supaHeaders(), 'Prefer': 'return=minimal' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(await r.text());
+}
+
+async function supaDelete(table, query) {
+  const r = await fetch(SUPA_URL + '/rest/v1/' + table + '?' + query, {
+    method: 'DELETE',
+    headers: supaHeaders()
+  });
+  if (!r.ok) throw new Error(await r.text());
+}
+
+// Settings helpers
+async function supaGetSetting(key) {
+  const rows = await supaGet('app_settings', 'key=eq.' + key);
+  return rows.length ? JSON.parse(rows[0].value) : null;
+}
+async function supaSetSetting(key, val) {
+  // Delete then insert (simplest upsert without needing unique constraint setup)
+  await supaDelete('app_settings', 'key=eq.' + key);
+  await supaPost('app_settings', { key: key, value: JSON.stringify(val) });
+}
+
+// ── Init: load from Supabase, fall back to localStorage ──
 async function initFromSupabase() {
-  showSyncStatus('Connecting to database…');
+  setSyncLabel('Connecting…');
   try {
-    // Load all three data sets in parallel
-    const [loanRows, bonusRows, targets, adjRateVal, adjEnabledVal] = await Promise.all([
-      sb.getLoan(),
-      sb.getBonus(),
-      sb.getSetting('targets'),
-      sb.getSetting('adjRate'),
-      sb.getSetting('adjEnabled')
+    const [loanRows, bonusRows] = await Promise.all([
+      supaGet('loan_transactions', 'order=date.asc'),
+      supaGet('bonus_entries',     'order=date.asc')
     ]);
 
-    if(loanRows.length === 0) {
-      // First run — seed Supabase with local data
-      showSyncStatus('First run — seeding database…');
+    if (loanRows.length === 0) {
+      // First time — seed database
+      setSyncLabel('Seeding database…');
       await seedSupabase();
     } else {
-      loanData  = loanRows;
+      loanData  = loanRows.map(r => ({...r, desc: r.description || r.desc}));
       bonusData = bonusRows;
-      if(targets)      targetLog  = targets;
-      if(adjRateVal !== null)    adjRate    = adjRateVal;
-      if(adjEnabledVal !== null) adjEnabled = adjEnabledVal;
-      loanNextId  = loanData.length  ? Math.max(...loanData.map(r=>r.id))  + 1 : 1;
-      bonusNextId = bonusData.length ? Math.max(...bonusData.map(r=>r.id)) + 1 : 1;
-      // Also update localStorage as offline cache
+      // Load settings
+      try {
+        const [tgt, aRate, aEn] = await Promise.all([
+          supaGetSetting('targets'),
+          supaGetSetting('adjRate'),
+          supaGetSetting('adjEnabled')
+        ]);
+        if (tgt   !== null) targetLog  = tgt;
+        if (aRate !== null) adjRate    = aRate;
+        if (aEn   !== null) adjEnabled = aEn;
+      } catch(e) { /* settings optional */ }
+      loanNextId  = Math.max(0, ...loanData.map(r => r.id))  + 1;
+      bonusNextId = Math.max(0, ...bonusData.map(r => r.id)) + 1;
       save('mv_loan_v3',    loanData);
       save('mv_bonus_v3',   bonusData);
-      save('mv_targets_v3', targetLog);
     }
     syncReady = true;
-    showSyncStatus('✓ Synced', true);
-    renderBonus();
+    setSyncLabel('✓ Synced');
   } catch(err) {
-    console.error('Supabase init failed:', err);
-    showSyncStatus('Offline — using local data', false, true);
-    // Fall back to localStorage
+    console.error('Supabase:', err);
+    setSyncLabel('Offline mode');
     syncReady = false;
-    renderBonus();
   }
+  renderBonus();
 }
 
 async function seedSupabase() {
-  // Insert all seed loan data
-  const loanWithIds = SEED_LOAN.map((r,i) => ({...r, id:i+1}));
-  const bonusWithIds = SEED_BONUS.map((r,i) => ({...r, id:i+1}));
-  await Promise.all([
-    sbRequest('POST', 'loan_transactions', loanWithIds, '?on_conflict=id'),
-    sbRequest('POST', 'bonus_entries',     bonusWithIds, '?on_conflict=id'),
-    sb.setSetting('targets',    targetLog),
-    sb.setSetting('adjRate',    adjRate),
-    sb.setSetting('adjEnabled', adjEnabled)
-  ]);
-  loanData  = loanWithIds;
-  bonusData = bonusWithIds;
+  const lRows = SEED_LOAN.map((r, i)  => ({ id: i+1, date: r.date, description: r.desc, amt: r.amt }));
+  const bRows = SEED_BONUS.map((r, i) => ({ id: i+1, date: r.date, hrs: r.hrs, rate: r.rate }));
+  await supaPost('loan_transactions', lRows);
+  await supaPost('bonus_entries',     bRows);
+  loanData  = SEED_LOAN.map((r, i)  => ({ ...r, id: i+1 }));
+  bonusData = SEED_BONUS.map((r, i) => ({ ...r, id: i+1 }));
   loanNextId  = loanData.length  + 1;
   bonusNextId = bonusData.length + 1;
-  save('mv_loan_v3',    loanData);
-  save('mv_bonus_v3',   bonusData);
-  save('mv_targets_v3', targetLog);
+  save('mv_loan_v3',  loanData);
+  save('mv_bonus_v3', bonusData);
 }
 
-// ══════════════════════════════════════
-// SYNC STATUS INDICATOR
-// ══════════════════════════════════════
-function showSyncStatus(msg, success=false, warn=false) {
+function setSyncLabel(msg) {
   const el = document.getElementById('sync-status');
-  if(!el) return;
-  el.textContent = msg;
-  el.style.color = success ? '#4ade80' : warn ? '#fde68a' : 'rgba(255,255,255,0.7)';
+  if (el) el.textContent = msg;
 }
 
+// Background sync helpers (fire and forget)
+function syncAddLoan(row) {
+  if (!syncReady) return;
+  supaPost('loan_transactions', { id: row.id, date: row.date, description: row.desc, amt: row.amt })
+    .catch(e => console.warn('sync loan add:', e));
+}
+function syncDelLoan(id) {
+  if (!syncReady) return;
+  supaDelete('loan_transactions', 'id=eq.' + id)
+    .catch(e => console.warn('sync loan del:', e));
+}
+function syncAddBonus(row) {
+  if (!syncReady) return;
+  supaPost('bonus_entries', { id: row.id, date: row.date, hrs: row.hrs, rate: row.rate })
+    .catch(e => console.warn('sync bonus add:', e));
+}
+function syncDelBonus(id) {
+  if (!syncReady) return;
+  supaDelete('bonus_entries', 'id=eq.' + id)
+    .catch(e => console.warn('sync bonus del:', e));
+}
+function syncSettings() {
+  if (!syncReady) return;
+  supaSetSetting('targets',    targetLog).catch(e => console.warn(e));
+  supaSetSetting('adjRate',    adjRate).catch(e => console.warn(e));
+  supaSetSetting('adjEnabled', adjEnabled).catch(e => console.warn(e));
+}
 
 // ──────────────────────────────
 // SEED DATA
@@ -956,7 +963,7 @@ function renderLoan() {
     <div class="l-entry">
       <div>
         <div class="l-entry-date">${fmtDateUS(r.date)}</div>
-        <div class="l-entry-desc">${r.desc}</div>
+        <div class="l-entry-desc">${r.description || r.desc || ""}</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
         <div>
@@ -975,26 +982,20 @@ function renderLoan() {
 // ──────────────────────────────
 function addLoanEntry() { openLoanKeypad(); } // legacy stub
 
-async function deleteLoan(id) {
+function deleteLoan(id) {
   if(!confirm('Delete this transaction?')) return;
   loanData = loanData.filter(r=>r.id!==id);
   save('mv_loan_v3', loanData);
+  syncDelLoan(id);
   renderLoan();
-  if(syncReady) {
-    try { await sb.deleteLoan(id); }
-    catch(e) { console.warn('Supabase delete loan failed:', e); }
-  }
 }
 
-async function deleteBonus(id) {
+function deleteBonus(id) {
   if(!confirm('Delete this entry?')) return;
   bonusData = bonusData.filter(r=>r.id!==id);
   save('mv_bonus_v3', bonusData);
+  syncDelBonus(id);
   renderBonus();
-  if(syncReady) {
-    try { await sb.deleteBonus(id); }
-    catch(e) { console.warn('Supabase delete bonus failed:', e); }
-  }
 }
 
 // ──────────────────────────────
@@ -1011,7 +1012,7 @@ function openTargetEdit() {
   targetLog = targetLog.filter(t=>t.effectiveDate!==effective);
   targetLog.push({effectiveDate:effective, amount:+parsed.toFixed(2)});
   save('mv_targets_v3', targetLog);
-  if(syncReady) sb.setSetting('targets', targetLog).catch(e=>console.warn(e));
+  syncSettings();
   showToast(`Target updated to $${parsed.toFixed(2)} from ${effective} forward ✓`);
   renderBonus();
 }
@@ -1082,26 +1083,23 @@ function toggleAdj() {
     : 'Adjust moving forward (off)';
 }
 
-async function commitBonusEntry() {
+function commitBonusEntry() {
   const hrs  = parseFloat(kpHrs);
   const rate = parseFloat(kpRate);
   if(!hrs||hrs<=0||!rate||rate<=0) { showToast('Enter valid hours and rate.'); return; }
   if(adjEnabled) {
     adjRate = +rate.toFixed(2);
     save('mv_adjrate', adjRate);
-    if(syncReady) sb.setSetting('adjRate', adjRate).catch(e=>console.warn(e));
+    syncSettings();
   }
   const newRow = {id:bonusNextId++, date:todayStr(), hrs:+hrs, rate:+rate.toFixed(2)};
   bonusData.push(newRow);
   save('mv_bonus_v3', bonusData);
+  syncAddBonus(newRow);
   closeKeypad();
   logYear = String(TODAY.getFullYear());
   renderBonus();
   showToast(`Entry added: ${hrs} hrs @ $${rate}/hr ✓`);
-  if(syncReady) {
-    try { await sb.insertBonus(newRow); }
-    catch(e) { console.warn('Supabase bonus sync failed:', e); }
-  }
 }
 
 // ──────────────────────────────
@@ -1208,15 +1206,7 @@ initFromSupabase(); // load from Supabase, fall back to localStorage
 // ──────────────────────────────
 // EXPORT / IMPORT
 // ──────────────────────────────
-async function exportData() {
-  // Pull fresh from Supabase if available
-  if(syncReady) {
-    try {
-      const [fresh_loan, fresh_bonus] = await Promise.all([sb.getLoan(), sb.getBonus()]);
-      if(fresh_loan.length)  loanData  = fresh_loan;
-      if(fresh_bonus.length) bonusData = fresh_bonus;
-    } catch(e) { console.warn('Export: using cached data', e); }
-  }
+function exportData() {
   const payload = {
     version: 3,
     exportedAt: new Date().toISOString(),
@@ -1268,23 +1258,8 @@ function importData(event) {
       const bonusVisible = document.getElementById('page-bonus').style.display !== 'none';
       if (bonusVisible) renderBonus(); else renderLoan();
       showToast('Data restored from backup ✓');
-      // Push to Supabase in background
-      if(syncReady) {
-        try {
-          await Promise.all([
-            sbRequest('DELETE','loan_transactions',null,'?id=gte.1'),
-            sbRequest('DELETE','bonus_entries',null,'?id=gte.1')
-          ]);
-          await Promise.all([
-            sbRequest('POST','loan_transactions',loanData,'?on_conflict=id'),
-            sbRequest('POST','bonus_entries',bonusData,'?on_conflict=id'),
-            sb.setSetting('targets',targetLog),
-            sb.setSetting('adjRate',adjRate),
-            sb.setSetting('adjEnabled',adjEnabled)
-          ]);
-          showToast('Backup restored & synced to cloud ✓');
-        } catch(e) { console.warn('Supabase import sync failed:', e); }
-      }
+      // Sync settings to Supabase
+      syncSettings();
     } catch(err) {
       showToast('Could not read file. Is it a valid backup?');
     }
@@ -1368,7 +1343,7 @@ function updateLkpDisplay() {
   btn.className    = 'lkp-sign-btn ' + (isNeg ? 'negative' : 'positive');
 }
 
-async function commitLoanEntry() {
+function commitLoanEntry() {
   const desc = document.getElementById('lkp-desc').value.trim();
   const num  = parseFloat(lkpValue);
   if(!desc)            { showToast('Please enter a description.'); return; }
@@ -1377,16 +1352,11 @@ async function commitLoanEntry() {
   const newRow = { id: loanNextId++, date: lkpDate, desc, amt: finalAmt };
   loanData.push(newRow);
   save('mv_loan_v3', loanData);
+  syncAddLoan(newRow);
   closeLoanKeypad();
   renderLoan();
   const label = lkpSign === -1 ? 'Payment' : 'Charge';
   showToast(label + ' added: ' + fmt$(Math.abs(finalAmt)) + ' ✓');
-  // Sync to Supabase in background
-  if(syncReady) {
-    try {
-      await sb.insertLoan(newRow);
-    } catch(e) { console.warn('Supabase loan sync failed:', e); }
-  }
 }
 
 </script>
