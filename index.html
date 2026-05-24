@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>Maverick Tracker</title>
 <style>
+
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
 
 :root {
@@ -321,15 +322,17 @@ body {
   z-index:999; opacity:0; transition:all .3s; pointer-events:none; white-space:nowrap;
 }
 .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
 </style>
 </head>
 <body>
 <div class="phone">
 
   <!-- Status bar -->
-  <div class="status-bar blue" id="statusBar" style="position:relative;">
+  <div class="status-bar red" id="statusBar" style="position:relative;">
     <span id="clockDisplay">9:41</span>
     <div class="status-right" style="display:flex;align-items:center;gap:8px;">
+<span id="sync-status" style="font-size:9px;font-family:'DM Mono',monospace;color:rgba(255,255,255,0.7);"></span>
 <button class="dots-btn" onclick="toggleDotsMenu(event)">···</button>
     </div>
     <!-- Dots menu -->
@@ -341,16 +344,16 @@ body {
   </div>
 
   <!-- Tab bar -->
-  <div class="tab-bar blue" id="tabBar">
-    <div class="tab" id="tab-loan" onclick="switchTab('loan')">Loan Balance</div>
-    <div class="tab active" id="tab-bonus" onclick="switchTab('bonus')">Bonus Progress</div>
+  <div class="tab-bar red" id="tabBar">
+    <div class="tab active" id="tab-loan" onclick="switchTab('loan')">Loan Balance</div>
+    <div class="tab" id="tab-bonus" onclick="switchTab('bonus')">Bonus Progress</div>
   </div>
 
   <!-- Screen -->
   <div class="screen" id="mainScreen">
 
     <!-- ════ BONUS PAGE ════ -->
-    <div class="bonus-page" id="page-bonus">
+    <div class="bonus-page" id="page-bonus" style="display:none;">
 
       <div class="g-card">
         <div class="g-label">Total Bonus Accrued</div>
@@ -399,7 +402,7 @@ body {
     </div><!-- /bonus-page -->
 
     <!-- ════ LOAN PAGE ════ -->
-    <div class="loan-page" id="page-loan" style="display:none;">
+    <div class="loan-page" id="page-loan">
 
       <div class="l-card">
         <div class="l-lbl">Current Balance Owed</div>
@@ -535,8 +538,157 @@ body {
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
+<script>
+// ══════════════════════════════════════
+// SUPABASE CONFIG
+// ══════════════════════════════════════
+const SUPA_URL = 'https://ynuvaluhipgfmpxheenl.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InludXZhbHVoaXBnZm1weGhlZW5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NTEzMTgsImV4cCI6MjA5NTEyNzMxOH0.hVhsSTQxXpwCk-aa8Q8Pm01Agi5zPtYUfzTQaSlGKqY';
+let syncReady = false;
 
-<script>// ──────────────────────────────
+// ── Core fetch wrapper ──
+async function supa(method, table, body, query) {
+  query = query || '';
+  const url = SUPA_URL + '/rest/v1/' + table + (query ? '?' + query : '');
+  const headers = {
+    'apikey': SUPA_KEY,
+    'Authorization': 'Bearer ' + SUPA_KEY,
+    'Content-Type': 'application/json',
+    'Prefer': 'return=minimal'
+  };
+  const opts = { method: method, headers: headers };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(method + ' ' + table + ' ' + res.status + ': ' + txt);
+  }
+  const txt = await res.text();
+  return txt ? JSON.parse(txt) : null;
+}
+
+// ── Table operations ──
+function dbGetLoan()          { return supa('GET',    'loan_transactions', null, 'order=date.asc&select=*'); }
+function dbInsertLoan(row)    { return supa('POST',   'loan_transactions', row,  null); }
+function dbDeleteLoan(id)     { return supa('DELETE', 'loan_transactions', null, 'id=eq.' + id); }
+
+function dbGetBonus()         { return supa('GET',    'bonus_entries', null, 'order=date.asc&select=*'); }
+function dbInsertBonus(row)   { return supa('POST',   'bonus_entries', row,  null); }
+function dbDeleteBonus(id)    { return supa('DELETE', 'bonus_entries', null, 'id=eq.' + id); }
+
+function dbGetSetting(key) {
+  return supa('GET', 'app_settings', null, 'key=eq.' + key + '&select=*').then(function(rows) {
+    if (rows && rows.length > 0) return JSON.parse(rows[0].value);
+    return null;
+  });
+}
+function dbSetSetting(key, val) {
+  // Delete existing then insert fresh
+  return supa('DELETE', 'app_settings', null, 'key=eq.' + key).then(function() {
+    return supa('POST', 'app_settings', { key: key, value: JSON.stringify(val) }, null);
+  });
+}
+
+// ── Sync label ──
+function setSyncLabel(msg, color) {
+  var el = document.getElementById('sync-status');
+  if (el) {
+    el.textContent = msg;
+    el.style.color = color || 'rgba(255,255,255,0.7)';
+  }
+}
+
+// ── Fire-and-forget sync helpers (never block UI) ──
+function bgSyncLoan(row) {
+  if (!syncReady) return;
+  var dbRow = { id: row.id, date: row.date, description: row.desc, amt: row.amt };
+  dbInsertLoan(dbRow).catch(function(e) { console.warn('bg loan insert:', e); });
+}
+function bgDeleteLoan(id) {
+  if (!syncReady) return;
+  dbDeleteLoan(id).catch(function(e) { console.warn('bg loan delete:', e); });
+}
+function bgSyncBonus(row) {
+  if (!syncReady) return;
+  var dbRow = { id: row.id, date: row.date, hrs: row.hrs, rate: row.rate };
+  dbInsertBonus(dbRow).catch(function(e) { console.warn('bg bonus insert:', e); });
+}
+function bgDeleteBonus(id) {
+  if (!syncReady) return;
+  dbDeleteBonus(id).catch(function(e) { console.warn('bg bonus delete:', e); });
+}
+function bgSyncSettings() {
+  if (!syncReady) return;
+  dbSetSetting('targets', targetLog).catch(function(e) { console.warn('bg targets:', e); });
+  dbSetSetting('adjRate', adjRate).catch(function(e) { console.warn('bg adjRate:', e); });
+}
+
+// ── Map Supabase row -> local format ──
+function loanRowToLocal(r) {
+  return { id: r.id, date: r.date, desc: r.description || r.desc || '', amt: r.amt };
+}
+function bonusRowToLocal(r) {
+  return { id: r.id, date: r.date, hrs: r.hrs, rate: r.rate };
+}
+
+// ── Seed Supabase on first run ──
+async function seedDatabase() {
+  setSyncLabel('First run — seeding…');
+  try {
+    var loanRows  = SEED_LOAN.map(function(r, i)  { return { id: i+1, date: r.date, description: r.desc, amt: r.amt }; });
+    var bonusRows = SEED_BONUS.map(function(r, i) { return { id: i+1, date: r.date, hrs: r.hrs, rate: r.rate }; });
+    await dbInsertLoan(loanRows);
+    await dbInsertBonus(bonusRows);
+    await dbSetSetting('targets', targetLog);
+    await dbSetSetting('adjRate', adjRate);
+    loanData    = SEED_LOAN.map(function(r, i)  { return Object.assign({}, r, { id: i+1 }); });
+    bonusData   = SEED_BONUS.map(function(r, i) { return Object.assign({}, r, { id: i+1 }); });
+    loanNextId  = loanData.length  + 1;
+    bonusNextId = bonusData.length + 1;
+    save('mv_loan_v3',  loanData);
+    save('mv_bonus_v3', bonusData);
+    setSyncLabel('✓ Seeded', '#4ade80');
+  } catch(e) {
+    console.error('Seed failed:', e);
+    setSyncLabel('Seed failed', '#fca5a5');
+  }
+}
+
+// ── Main init ──
+async function initDB() {
+  setSyncLabel('Connecting…');
+  try {
+    var loanRows = await dbGetLoan();
+    if (!loanRows || loanRows.length === 0) {
+      await seedDatabase();
+    } else {
+      loanData  = loanRows.map(loanRowToLocal);
+      bonusData = (await dbGetBonus()).map(bonusRowToLocal);
+      try {
+        var tgt   = await dbGetSetting('targets');
+        var aRate = await dbGetSetting('adjRate');
+        if (tgt   !== null) targetLog = tgt;
+        if (aRate !== null) adjRate   = aRate;
+      } catch(e) { /* settings optional */ }
+      loanNextId  = Math.max.apply(null, loanData.map(function(r)  { return r.id; })) + 1;
+      bonusNextId = Math.max.apply(null, bonusData.map(function(r) { return r.id; })) + 1;
+      save('mv_loan_v3',  loanData);
+      save('mv_bonus_v3', bonusData);
+    }
+    syncReady = true;
+    setSyncLabel('✓ Live', '#4ade80');
+    // Re-render active tab with fresh data
+    var loanVisible = document.getElementById('page-loan').style.display !== 'none';
+    if (loanVisible) renderLoan(); else renderBonus();
+  } catch(e) {
+    console.error('DB init error:', e);
+    setSyncLabel('Offline', '#fde68a');
+    syncReady = false;
+  }
+}
+
+
+// ──────────────────────────────
 // SEED DATA
 // ──────────────────────────────
 const SEED_LOAN = [
@@ -703,16 +855,37 @@ function renderBonus() {
   document.getElementById('b-remaining').textContent = fmt$(Math.max(0, fiveYrTarget - total));
   document.getElementById('target-display').textContent = fmt$(currentTarget());
 
-  // Progress bar: months elapsed / 60
+  // Progress bar: based on cumulative bonus vs monthly targets
   const BONUS_START = new Date(2025,8,1); // Sep 2025
   const monthsElapsed = (TODAY.getFullYear()-BONUS_START.getFullYear())*12 + (TODAY.getMonth()-BONUS_START.getMonth());
   const pct = Math.min(100, (monthsElapsed/60)*100);
   document.getElementById('prog-fill').style.width = pct+'%';
 
-  // Marker: current month/year in MM/YY
-  const mm = String(TODAY.getMonth()+1).padStart(2,'0');
-  const yy = String(TODAY.getFullYear()).slice(2);
-  document.getElementById('prog-marker').textContent = mm+'/'+yy;
+  // Marker: find the month when cumulative bonus first meets/exceeds the running target
+  // Walk month by month from start, accumulate expected target, find when actual total meets it
+  let markerLabel = '—';
+  let runningTarget = 0;
+  let found = false;
+  for (let i = 0; i < 60; i++) {
+    const d = new Date(BONUS_START.getFullYear(), BONUS_START.getMonth() + i, 1);
+    const k = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    runningTarget += targetForMonth(k);
+    if (!found && total >= runningTarget) {
+      // Still meeting target — check next month
+      const nextD = new Date(BONUS_START.getFullYear(), BONUS_START.getMonth() + i + 1, 1);
+      const nextK = nextD.getFullYear() + '-' + String(nextD.getMonth()+1).padStart(2,'0');
+      const nextTarget = runningTarget + targetForMonth(nextK);
+      if (total < nextTarget) {
+        // total meets this month but not next — this is the month goal is met
+        const mm2 = String(d.getMonth()+1).padStart(2,'0');
+        const yy2 = String(d.getFullYear()).slice(2);
+        markerLabel = mm2 + '/' + yy2;
+        found = true;
+      }
+    }
+  }
+  if (!found) markerLabel = 'TBD';
+  document.getElementById('prog-marker').textContent = markerLabel;
 
   // Schedule badge
   const expected = totalExpected();
@@ -844,6 +1017,7 @@ function deleteLoan(id) {
   if(!confirm('Delete this transaction?')) return;
   loanData = loanData.filter(r=>r.id!==id);
   save('mv_loan_v3', loanData);
+  bgDeleteLoan(id);
   renderLoan();
 }
 
@@ -851,6 +1025,7 @@ function deleteBonus(id) {
   if(!confirm('Delete this entry?')) return;
   bonusData = bonusData.filter(r=>r.id!==id);
   save('mv_bonus_v3', bonusData);
+  bgDeleteBonus(id);
   renderBonus();
 }
 
@@ -868,6 +1043,7 @@ function openTargetEdit() {
   targetLog = targetLog.filter(t=>t.effectiveDate!==effective);
   targetLog.push({effectiveDate:effective, amount:+parsed.toFixed(2)});
   save('mv_targets_v3', targetLog);
+  bgSyncSettings();
   showToast(`Target updated to $${parsed.toFixed(2)} from ${effective} forward ✓`);
   renderBonus();
 }
@@ -949,6 +1125,7 @@ function commitBonusEntry() {
   const newRow = {id:bonusNextId++, date:todayStr(), hrs:+hrs, rate:+rate.toFixed(2)};
   bonusData.push(newRow);
   save('mv_bonus_v3', bonusData);
+  bgSyncBonus(newRow);
   closeKeypad();
   logYear = String(TODAY.getFullYear());
   renderBonus();
@@ -1054,7 +1231,8 @@ updateClock(); setInterval(updateClock,10000);
 // INIT
 // ──────────────────────────────
 initDateField();
-renderBonus();
+renderLoan();
+initDB(); // connect to Supabase (async, non-blocking)
 
 // ──────────────────────────────
 // EXPORT / IMPORT
@@ -1205,11 +1383,13 @@ function commitLoanEntry() {
   const newRow = { id: loanNextId++, date: lkpDate, desc, amt: finalAmt };
   loanData.push(newRow);
   save('mv_loan_v3', loanData);
+  bgSyncLoan(newRow);
   closeLoanKeypad();
   renderLoan();
   const label = lkpSign === -1 ? 'Payment' : 'Charge';
   showToast(label + ' added: ' + fmt$(Math.abs(finalAmt)) + ' ✓');
 }
+
 
 </script>
 </body>
